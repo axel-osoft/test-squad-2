@@ -427,6 +427,7 @@ url:
   sample: https://www.ansible.com/
 '''
 
+import cgi
 import datetime
 import json
 import os
@@ -436,11 +437,11 @@ import sys
 import tempfile
 
 from ansible.module_utils.basic import AnsibleModule, sanitize_keys
-from ansible.module_utils.six import PY2, PY3, binary_type, iteritems, string_types
+from ansible.module_utils.six import PY2, iteritems, string_types
 from ansible.module_utils.six.moves.urllib.parse import urlencode, urlsplit
 from ansible.module_utils._text import to_native, to_text
 from ansible.module_utils.common._collections_compat import Mapping, Sequence
-from ansible.module_utils.urls import fetch_url, get_response_filename, parse_content_type, prepare_multipart, url_argument_spec
+from ansible.module_utils.urls import fetch_url, prepare_multipart, url_argument_spec
 
 JSON_CANDIDATES = ('text', 'json', 'javascript')
 
@@ -457,15 +458,12 @@ def format_message(err, resp):
     return err + (' %s' % msg if msg else '')
 
 
-def write_file(module, dest, content, resp):
+def write_file(module, url, dest, content, resp):
     # create a tempfile with some test content
     fd, tmpsrc = tempfile.mkstemp(dir=module.tmpdir)
-    f = os.fdopen(fd, 'wb')
+    f = open(tmpsrc, 'wb')
     try:
-        if isinstance(content, binary_type):
-            f.write(content)
-        else:
-            shutil.copyfileobj(content, f)
+        f.write(content)
     except Exception as e:
         os.remove(tmpsrc)
         msg = format_message("Failed to create temporary content file: %s" % to_native(e), resp)
@@ -513,6 +511,13 @@ def write_file(module, dest, content, resp):
             module.fail_json(msg=msg, **resp)
 
     os.remove(tmpsrc)
+
+
+def url_filename(url):
+    fn = os.path.basename(urlsplit(url)[2])
+    if fn == '':
+        return 'index.html'
+    return fn
 
 
 def absolute_location(url, location):
@@ -572,7 +577,9 @@ def form_urlencoded(body):
 def uri(module, url, dest, body, body_format, method, headers, socket_timeout, ca_path, unredirected_headers):
     # is dest is set and is a directory, let's check if we get redirected and
     # set the filename from that url
-
+    redirected = False
+    redir_info = {}
+    r = {}
     src = module.params['src']
     if src:
         try:
@@ -586,14 +593,41 @@ def uri(module, url, dest, body, body_format, method, headers, socket_timeout, c
         data = body
 
     kwargs = {}
-    if dest is not None and os.path.isfile(dest):
+    if dest is not None:
+        # Stash follow_redirects, in this block we don't want to follow
+        # we'll reset back to the supplied value soon
+        follow_redirects = module.params['follow_redirects']
+        module.params['follow_redirects'] = False
+        if os.path.isdir(dest):
+            # first check if we are redirected to a file download
+            _, redir_info = fetch_url(module, url, data=body,
+                                      headers=headers,
+                                      method=method,
+                                      timeout=socket_timeout, unix_socket=module.params['unix_socket'])
+            # if we are redirected, update the url with the location header,
+            # and update dest with the new url filename
+            if redir_info['status'] in (301, 302, 303, 307):
+                url = redir_info['location']
+                redirected = True
+            dest = os.path.join(dest, url_filename(url))
         # if destination file already exist, only download if file newer
-        kwargs['last_mod_time'] = datetime.datetime.utcfromtimestamp(os.path.getmtime(dest))
+        if os.path.exists(dest):
+            kwargs['last_mod_time'] = datetime.datetime.utcfromtimestamp(os.path.getmtime(dest))
+
+        # Reset follow_redirects back to the stashed value
+        module.params['follow_redirects'] = follow_redirects
 
     resp, info = fetch_url(module, url, data=data, headers=headers,
                            method=method, timeout=socket_timeout, unix_socket=module.params['unix_socket'],
                            ca_path=ca_path, unredirected_headers=unredirected_headers,
                            **kwargs)
+
+    try:
+        content = resp.read()
+    except AttributeError:
+        # there was no content, but the error read()
+        # may have been stored in the info as 'body'
+        content = info.pop('body', '')
 
     if src:
         # Try to close the open file handle
@@ -602,7 +636,11 @@ def uri(module, url, dest, body, body_format, method, headers, socket_timeout, c
         except Exception:
             pass
 
-    return resp, info
+    r['redirected'] = redirected or info['url'] != url
+    r.update(redir_info)
+    r.update(info)
+
+    return r, content, dest
 
 
 def main():
@@ -688,52 +726,16 @@ def main():
 
     # Make the request
     start = datetime.datetime.utcnow()
-    r, info = uri(module, url, dest, body, body_format, method,
-                  dict_headers, socket_timeout, ca_path, unredirected_headers)
-
-    elapsed = (datetime.datetime.utcnow() - start).seconds
-
-    if r and dest is not None and os.path.isdir(dest):
-        filename = get_response_filename(r) or 'index.html'
-        dest = os.path.join(dest, filename)
-
-    if r:
-        content_type, main_type, sub_type, content_encoding = parse_content_type(r)
-    else:
-        content_type = 'application/octet-stream'
-        main_type = 'aplication'
-        sub_type = 'octet-stream'
-        content_encoding = 'utf-8'
-
-    maybe_json = content_type and any(candidate in sub_type for candidate in JSON_CANDIDATES)
-    maybe_output = maybe_json or return_content or info['status'] not in status_code
-
-    if maybe_output:
-        try:
-            if PY3 and r.closed:
-                raise TypeError
-            content = r.read()
-        except (AttributeError, TypeError):
-            # there was no content, but the error read()
-            # may have been stored in the info as 'body'
-            content = info.pop('body', b'')
-    elif r:
-        content = r
-    else:
-        content = None
-
-    resp = {}
-    resp['redirected'] = info['url'] != url
-    resp.update(info)
-
-    resp['elapsed'] = elapsed
+    resp, content, dest = uri(module, url, dest, body, body_format, method,
+                              dict_headers, socket_timeout, ca_path, unredirected_headers)
+    resp['elapsed'] = (datetime.datetime.utcnow() - start).seconds
     resp['status'] = int(resp['status'])
     resp['changed'] = False
 
     # Write the file out if requested
-    if r and dest is not None:
+    if dest is not None:
         if resp['status'] in status_code and resp['status'] != 304:
-            write_file(module, dest, content, resp)
+            write_file(module, url, dest, content, resp)
             # allow file attribute changes
             resp['changed'] = True
             module.params['path'] = dest
@@ -754,9 +756,34 @@ def main():
         uresp['location'] = absolute_location(url, uresp['location'])
 
     # Default content_encoding to try
-    if isinstance(content, binary_type):
+    content_encoding = 'utf-8'
+    if 'content_type' in uresp:
+        # Handle multiple Content-Type headers
+        charsets = []
+        content_types = []
+        for value in uresp['content_type'].split(','):
+            ct, params = cgi.parse_header(value)
+            if ct not in content_types:
+                content_types.append(ct)
+            if 'charset' in params:
+                if params['charset'] not in charsets:
+                    charsets.append(params['charset'])
+
+        if content_types:
+            content_type = content_types[0]
+            if len(content_types) > 1:
+                module.warn(
+                    'Received multiple conflicting Content-Type values (%s), using %s' % (', '.join(content_types), content_type)
+                )
+        if charsets:
+            content_encoding = charsets[0]
+            if len(charsets) > 1:
+                module.warn(
+                    'Received multiple conflicting charset values (%s), using %s' % (', '.join(charsets), content_encoding)
+                )
+
         u_content = to_text(content, encoding=content_encoding)
-        if maybe_json:
+        if any(candidate in content_type for candidate in JSON_CANDIDATES):
             try:
                 js = json.loads(u_content)
                 uresp['json'] = js
@@ -764,7 +791,7 @@ def main():
                 if PY2:
                     sys.exc_clear()  # Avoid false positive traceback in fail_json() on Python 2
     else:
-        u_content = None
+        u_content = to_text(content, encoding=content_encoding)
 
     if module.no_log_values:
         uresp = sanitize_keys(uresp, module.no_log_values, NO_MODIFY_KEYS)

@@ -23,7 +23,11 @@ import os
 import sys
 
 from collections import defaultdict
-from hashlib import sha1
+
+try:
+    from hashlib import sha1
+except ImportError:
+    from sha import sha as sha1
 
 from jinja2.exceptions import UndefinedError
 

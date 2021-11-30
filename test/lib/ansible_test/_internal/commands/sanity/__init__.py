@@ -242,7 +242,7 @@ def command_sanity(args):  # type: (SanityConfig) -> None
                     elif isinstance(test, SanitySingleVersion):
                         # single version sanity tests use the controller python
                         test_profile = host_state.controller_profile
-                        virtualenv_python = create_sanity_virtualenv(args, test_profile.python, test.name)
+                        virtualenv_python = create_sanity_virtualenv(args, test_profile.python, test.name, context=test.name)
 
                         if virtualenv_python:
                             virtualenv_yaml = check_sanity_virtualenv_yaml(virtualenv_python)
@@ -1077,8 +1077,10 @@ def create_sanity_virtualenv(
         args,  # type: SanityConfig
         python,  # type: PythonConfig
         name,  # type: str
+        ansible=False,  # type: bool
         coverage=False,  # type: bool
         minimize=False,  # type: bool
+        context=None,  # type: t.Optional[str]
 ):  # type: (...) -> t.Optional[VirtualPythonConfig]
     """Return an existing sanity virtual environment matching the requested parameters or create a new one."""
     commands = collect_requirements(  # create_sanity_virtualenv()
@@ -1086,11 +1088,13 @@ def create_sanity_virtualenv(
         controller=True,
         virtualenv=False,
         command=None,
-        ansible=False,
-        cryptography=False,
+        # used by import tests
+        ansible=ansible,
+        cryptography=ansible,
         coverage=coverage,
         minimize=minimize,
-        sanity=name,
+        # used by non-import tests
+        sanity=context,
     )
 
     if commands:

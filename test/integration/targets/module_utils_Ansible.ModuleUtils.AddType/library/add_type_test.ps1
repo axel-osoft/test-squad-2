@@ -9,13 +9,10 @@ $result = @{
     changed = $false
 }
 
-Function Assert-Equal($actual, $expected) {
+Function Assert-Equals($actual, $expected) {
     if ($actual -cne $expected) {
         $call_stack = (Get-PSCallStack)[1]
-        $error_msg = -join @(
-            "AssertionError:`r`nActual: `"$actual`" != Expected: `"$expected`"`r`nLine: "
-            "$($call_stack.ScriptLineNumber), Method: $($call_stack.Position.Text)"
-        )
+        $error_msg = "AssertionError:`r`nActual: `"$actual`" != Expected: `"$expected`"`r`nLine: $($call_stack.ScriptLineNumber), Method: $($call_stack.Position.Text)"
         Fail-Json -obj $result -message $error_msg
     }
 }
@@ -37,16 +34,15 @@ namespace Namespace1
 }
 '@
 $res = Add-CSharpType -References $code
-Assert-Equal -actual $res -expected $null
+Assert-Equals -actual $res -expected $null
 
 $actual = [Namespace1.Class1]::GetString($false)
-Assert-Equal $actual -expected "Hello World"
+Assert-Equals $actual -expected "Hello World"
 
 try {
     [Namespace1.Class1]::GetString($true)
-}
-catch {
-    Assert-Equal ($_.Exception.ToString().Contains("at Namespace1.Class1.GetString(Boolean error)`r`n")) -expected $true
+} catch {
+    Assert-Equals ($_.Exception.ToString().Contains("at Namespace1.Class1.GetString(Boolean error)`r`n")) -expected $true
 }
 
 $code_debug = @'
@@ -66,18 +62,17 @@ namespace Namespace2
 }
 '@
 $res = Add-CSharpType -References $code_debug -IncludeDebugInfo
-Assert-Equal -actual $res -expected $null
+Assert-Equals -actual $res -expected $null
 
 $actual = [Namespace2.Class2]::GetString($false)
-Assert-Equal $actual -expected "Hello World"
+Assert-Equals $actual -expected "Hello World"
 
 try {
     [Namespace2.Class2]::GetString($true)
-}
-catch {
+} catch {
     $tmp_path = [System.IO.Path]::GetFullPath($env:TMP).ToLower()
-    Assert-Equal ($_.Exception.ToString().ToLower().Contains("at namespace2.class2.getstring(boolean error) in $tmp_path")) -expected $true
-    Assert-Equal ($_.Exception.ToString().Contains(".cs:line 10")) -expected $true
+    Assert-Equals ($_.Exception.ToString().ToLower().Contains("at namespace2.class2.getstring(boolean error) in $tmp_path")) -expected $true
+    Assert-Equals ($_.Exception.ToString().Contains(".cs:line 10")) -expected $true
 }
 
 $code_tmp = @'
@@ -98,21 +93,19 @@ namespace Namespace3
 '@
 $tmp_path = $env:USERPROFILE
 $res = Add-CSharpType -References $code_tmp -IncludeDebugInfo -TempPath $tmp_path -PassThru
-Assert-Equal -actual $res.GetType().Name -expected "RuntimeAssembly"
-Assert-Equal -actual $res.Location -expected ""
-Assert-Equal -actual $res.GetTypes().Length -expected 1
-Assert-Equal -actual $res.GetTypes()[0].Name -expected "Class3"
+Assert-Equals -actual $res.GetType().Name -expected "RuntimeAssembly"
+Assert-Equals -actual $res.Location -expected ""
+Assert-Equals -actual $res.GetTypes().Length -expected 1
+Assert-Equals -actual $res.GetTypes()[0].Name -expected "Class3"
 
 $actual = [Namespace3.Class3]::GetString($false)
-Assert-Equal $actual -expected "Hello World"
+Assert-Equals $actual -expected "Hello World"
 
 try {
     [Namespace3.Class3]::GetString($true)
-}
-catch {
-    $actual = $_.Exception.ToString().ToLower().Contains("at namespace3.class3.getstring(boolean error) in $($tmp_path.ToLower())")
-    Assert-Equal $actual -expected $true
-    Assert-Equal ($_.Exception.ToString().Contains(".cs:line 10")) -expected $true
+} catch {
+    Assert-Equals ($_.Exception.ToString().ToLower().Contains("at namespace3.class3.getstring(boolean error) in $($tmp_path.ToLower())")) -expected $true
+    Assert-Equals ($_.Exception.ToString().Contains(".cs:line 10")) -expected $true
 }
 
 $warning_code = @'
@@ -137,17 +130,15 @@ namespace Namespace4
 $failed = $false
 try {
     Add-CSharpType -References $warning_code
-}
-catch {
+} catch {
     $failed = $true
-    $actual = $_.Exception.Message.Contains("error CS0219: Warning as Error: The variable 'a' is assigned but its value is never used")
-    Assert-Equal -actual $actual -expected $true
+    Assert-Equals -actual ($_.Exception.Message.Contains("error CS0219: Warning as Error: The variable 'a' is assigned but its value is never used")) -expected $true
 }
-Assert-Equal -actual $failed -expected $true
+Assert-Equals -actual $failed -expected $true
 
 Add-CSharpType -References $warning_code -IgnoreWarnings
 $actual = [Namespace4.Class4]::GetString($true)
-Assert-Equal -actual $actual -expected "Hello World"
+Assert-Equals -actual $actual -expected "Hello World"
 
 $reference_1 = @'
 using System;
@@ -190,7 +181,7 @@ namespace Namespace6
 
 Add-CSharpType -References $reference_1, $reference_2
 $actual = [Namespace6.Class6]::GetString()
-Assert-Equal -actual $actual -expected "Hello World"
+Assert-Equals -actual $actual -expected "Hello World"
 
 $ignored_warning = @'
 using System;
@@ -211,7 +202,7 @@ namespace Namespace7
 '@
 Add-CSharpType -References $ignored_warning
 $actual = [Namespace7.Class7]::GetString()
-Assert-Equal -actual $actual -expected "abc"
+Assert-Equals -actual $actual -expected "abc"
 
 $defined_symbol = @'
 using System;
@@ -234,7 +225,7 @@ namespace Namespace8
 '@
 Add-CSharpType -References $defined_symbol -CompileSymbols "SYMBOL1"
 $actual = [Namespace8.Class8]::GetString()
-Assert-Equal -actual $actual -expected "symbol"
+Assert-Equals -actual $actual -expected "symbol"
 
 $type_accelerator = @'
 using System;
@@ -254,7 +245,7 @@ namespace Namespace9
 '@
 Add-CSharpType -Reference $type_accelerator
 $actual = [AnsibleType]::GetString()
-Assert-Equal -actual $actual -expected "a"
+Assert-Equals -actual $actual -expected "a"
 
 $missing_type_class = @'
 using System;
@@ -275,12 +266,11 @@ namespace Namespace10
 $failed = $false
 try {
     Add-CSharpType -Reference $missing_type_class
-}
-catch {
+} catch {
     $failed = $true
-    Assert-Equal -actual $_.Exception.Message -expected "Failed to find compiled class 'MissingClass' for custom TypeAccelerator."
+    Assert-Equals -actual $_.Exception.Message -expected "Failed to find compiled class 'MissingClass' for custom TypeAccelerator."
 }
-Assert-Equal -actual $failed -expected $true
+Assert-Equals -actual $failed -expected $true
 
 $arch_class = @'
 using System;
@@ -303,7 +293,7 @@ namespace Namespace11
 }
 '@
 Add-CSharpType -Reference $arch_class
-Assert-Equal -actual ([Namespace11.Class11]::GetIntPtrSize()) -expected ([System.IntPtr]::Size)
+Assert-Equals -actual ([Namespace11.Class11]::GetIntPtrSize()) -expected ([System.IntPtr]::Size)
 
 $lib_set = @'
 using System;
@@ -326,7 +316,7 @@ try {
 finally {
     Remove-Item -LiteralPath env:\LIB
 }
-Assert-Equal -actual ([Namespace12.Class12]::GetString()) -expected "b"
+Assert-Equals -actual ([Namespace12.Class12]::GetString()) -expected "b"
 
 $result.res = "success"
 Exit-Json -obj $result
