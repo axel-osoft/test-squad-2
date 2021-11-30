@@ -21,7 +21,12 @@ __metaclass__ = type
 
 import os
 
-from hashlib import sha1
+# Note, sha1 is the only hash algorithm compatible with python2.4 and with
+# FIPS-140 mode (as of 11-2014)
+try:
+    from hashlib import sha1
+except ImportError:
+    from sha import sha as sha1
 
 # Backwards compat only
 try:

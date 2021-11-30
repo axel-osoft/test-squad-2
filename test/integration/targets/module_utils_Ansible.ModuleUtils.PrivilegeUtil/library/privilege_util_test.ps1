@@ -5,7 +5,7 @@
 
 $module = [Ansible.Basic.AnsibleModule]::Create($args, @{})
 
-Function Assert-Equal($actual, $expected) {
+Function Assert-Equals($actual, $expected) {
     if ($actual -cne $expected) {
         $call_stack = (Get-PSCallStack)[1]
         $module.Result.actual = $actual
@@ -70,21 +70,20 @@ foreach ($privilege in $total_privileges) {
         $expected = $actual_privileges.$privilege
     }
     $actual = Get-AnsiblePrivilege -Name $privilege
-    Assert-Equal -actual $actual -expected $expected
+    Assert-Equals -actual $actual -expected $expected
 }
 
 # test c# GetAllPrivilegeInfo
 $actual = [Ansible.Privilege.PrivilegeUtil]::GetAllPrivilegeInfo($process)
-Assert-Equal -actual $actual.GetType().Name -expected 'Dictionary`2'
-Assert-Equal -actual $actual.Count -expected $actual_privileges.Count
+Assert-Equals -actual $actual.GetType().Name -expected 'Dictionary`2'
+Assert-Equals -actual $actual.Count -expected $actual_privileges.Count
 foreach ($privilege in $total_privileges) {
     if ($actual_privileges.ContainsKey($privilege)) {
         $actual_value = $actual.$privilege
         if ($actual_privileges.$privilege) {
-            Assert-Equal -actual $actual_value.HasFlag([Ansible.Privilege.PrivilegeAttributes]::Enabled) -expected $true
-        }
-        else {
-            Assert-Equal -actual $actual_value.HasFlag([Ansible.Privilege.PrivilegeAttributes]::Enabled) -expected $false
+            Assert-Equals -actual $actual_value.HasFlag([Ansible.Privilege.PrivilegeAttributes]::Enabled) -expected $true
+        } else {
+            Assert-Equals -actual $actual_value.HasFlag([Ansible.Privilege.PrivilegeAttributes]::Enabled) -expected $false
         }
     }
 }
@@ -94,19 +93,19 @@ Set-AnsiblePrivilege -Name SeUndockPrivilege -Value $false  # ensure we start wi
 
 Set-AnsiblePrivilege -Name SeUndockPrivilege -Value $true -WhatIf
 $actual = Get-AnsiblePrivilege -Name SeUndockPrivilege
-Assert-Equal -actual $actual -expected $false
+Assert-Equals -actual $actual -expected $false
 
 Set-AnsiblePrivilege -Name SeUndockPrivilege -Value $true
 $actual = Get-AnsiblePrivilege -Name SeUndockPrivilege
-Assert-Equal -actual $actual -expected $true
+Assert-Equals -actual $actual -expected $true
 
 Set-AnsiblePrivilege -Name SeUndockPrivilege -Value $false -WhatIf
 $actual = Get-AnsiblePrivilege -Name SeUndockPrivilege
-Assert-Equal -actual $actual -expected $true
+Assert-Equals -actual $actual -expected $true
 
 Set-AnsiblePrivilege -Name SeUndockPrivilege -Value $false
 $actual = Get-AnsiblePrivilege -Name SeUndockPrivilege
-Assert-Equal -actual $actual -expected $false
+Assert-Equals -actual $actual -expected $false
 
 $module.Result.data = "success"
 $module.ExitJson()

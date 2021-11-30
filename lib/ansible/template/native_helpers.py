@@ -140,11 +140,6 @@ def ansible_native_concat(nodes):
         out = ''.join([to_text(_fail_on_undefined(v)) for v in chain(head, nodes)])
 
     try:
-        return ast.literal_eval(
-            # In Python 3.10+ ast.literal_eval removes leading spaces/tabs
-            # from the given string. For backwards compatibility we need to
-            # parse the string ourselves without removing leading spaces/tabs.
-            ast.parse(out, mode='eval')
-        )
+        return ast.literal_eval(out)
     except (ValueError, SyntaxError, MemoryError):
         return out

@@ -156,9 +156,9 @@ class StrategyModule(StrategyBase):
                             if same_tasks >= throttle:
                                 break
 
-                        # advance the host, mark the host blocked, and queue it
+                        # pop the task, mark the host blocked, and queue it
                         self._blocked_hosts[host_name] = True
-                        iterator.set_state_for_host(host.name, state)
+                        (state, task) = iterator.get_next_task_for_host(host)
 
                         try:
                             action = action_loader.get(task.action, class_only=True, collection_list=task.collections)
