@@ -18,7 +18,7 @@ DOCUMENTATION = '''
         plugin:
             description: token that ensures this is a source file for the 'constructed' plugin.
             required: True
-            choices: ['ansible.builtin.constructed', 'constructed']
+            choices: ['constructed']
         use_vars_plugins:
             description:
                 - Normally, for performance reasons, vars plugins get executed after the inventory sources complete the base inventory,
@@ -36,7 +36,7 @@ DOCUMENTATION = '''
 
 EXAMPLES = r'''
     # inventory.config file in YAML format
-    plugin: ansible.builtin.constructed
+    plugin: constructed
     strict: False
     compose:
         var_sum: var1 + var2

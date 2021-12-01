@@ -35,7 +35,7 @@ from jinja2.exceptions import UndefinedError
 
 from ansible import constants as C
 from ansible import context
-from ansible.errors import AnsibleError, AnsibleFileNotFound, AnsibleUndefinedVariable, AnsibleParserError
+from ansible.errors import AnsibleError, AnsibleFileNotFound, AnsibleUndefinedVariable
 from ansible.executor import action_write_locks
 from ansible.executor.play_iterator import IteratingStates, FailedStates
 from ansible.executor.process.worker import WorkerProcess
@@ -157,7 +157,7 @@ def debug_closure(func):
                 if next_action.result == NextAction.REDO:
                     # rollback host state
                     self._tqm.clear_failed_hosts()
-                    iterator.set_state_for_host(host.name, prev_host_state)
+                    iterator._host_states[host.name] = prev_host_state
                     for method, what in status_to_stats_map:
                         if getattr(result, method)():
                             self._tqm._stats.decrement(what, host.name)
@@ -945,8 +945,7 @@ class StrategyBase:
             # first processed, we do so now for each host in the list
             for host in included_file._hosts:
                 self._tqm._stats.increment('ok', host.name)
-        except AnsibleParserError:
-            raise
+
         except AnsibleError as e:
             if isinstance(e, AnsibleFileNotFound):
                 reason = "Could not find or access '%s' on the Ansible Controller." % to_text(e.file_name)
@@ -1062,8 +1061,6 @@ class StrategyBase:
                             )
                             if not result:
                                 break
-                except AnsibleParserError:
-                    raise
                 except AnsibleError as e:
                     for host in included_file._hosts:
                         iterator.mark_host_failed(host)
@@ -1162,7 +1159,7 @@ class StrategyBase:
                 for host in self._inventory.get_hosts(iterator._play.hosts):
                     self._tqm._failed_hosts.pop(host.name, False)
                     self._tqm._unreachable_hosts.pop(host.name, False)
-                    iterator.set_fail_state_for_host(host.name, FailedStates.NONE)
+                    iterator._host_states[host.name].fail_state = FailedStates.NONE
                 msg = "cleared host errors"
             else:
                 skipped = True
@@ -1171,7 +1168,7 @@ class StrategyBase:
             if _evaluate_conditional(target_host):
                 for host in self._inventory.get_hosts(iterator._play.hosts):
                     if host.name not in self._tqm._unreachable_hosts:
-                        iterator.set_run_state_for_host(host.name, IteratingStates.COMPLETE)
+                        iterator._host_states[host.name].run_state = IteratingStates.COMPLETE
                 msg = "ending batch"
             else:
                 skipped = True
@@ -1180,7 +1177,7 @@ class StrategyBase:
             if _evaluate_conditional(target_host):
                 for host in self._inventory.get_hosts(iterator._play.hosts):
                     if host.name not in self._tqm._unreachable_hosts:
-                        iterator.set_run_state_for_host(host.name, IteratingStates.COMPLETE)
+                        iterator._host_states[host.name].run_state = IteratingStates.COMPLETE
                         # end_play is used in PlaybookExecutor/TQM to indicate that
                         # the whole play is supposed to be ended as opposed to just a batch
                         iterator.end_play = True
@@ -1190,7 +1187,7 @@ class StrategyBase:
                 skip_reason += ', continuing play'
         elif meta_action == 'end_host':
             if _evaluate_conditional(target_host):
-                iterator.set_run_state_for_host(target_host.name, IteratingStates.COMPLETE)
+                iterator._host_states[target_host.name].run_state = IteratingStates.COMPLETE
                 iterator._play._removed_hosts.append(target_host.name)
                 msg = "ending play for %s" % target_host.name
             else:

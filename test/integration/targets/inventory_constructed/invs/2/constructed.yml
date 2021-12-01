@@ -1,4 +1,4 @@
-plugin: ansible.builtin.constructed
+plugin: constructed
 use_vars_plugins: true
 keyed_groups:
   - key: iamdefined

@@ -1,4 +1,4 @@
-plugin: ansible.builtin.constructed
+plugin: constructed
 keyed_groups:
   - key: os
     default_value: "fedora"

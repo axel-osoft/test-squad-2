@@ -87,17 +87,8 @@ class ImportTest(SanityMultipleVersion):
     """Sanity test for proper import exception handling."""
     def filter_targets(self, targets):  # type: (t.List[TestTarget]) -> t.List[TestTarget]
         """Return the given list of test targets, filtered to include only those relevant for the test."""
-        if data_context().content.is_ansible:
-            # all of ansible-core must pass the import test, not just plugins/modules
-            # modules/module_utils will be tested using the module context
-            # everything else will be tested using the plugin context
-            paths = ['lib/ansible']
-        else:
-            # only plugins/modules must pass the import test for collections
-            paths = list(data_context().content.plugin_paths.values())
-
         return [target for target in targets if os.path.splitext(target.path)[1] == '.py' and
-                any(is_subdir(target.path, path) for path in paths)]
+                any(is_subdir(target.path, path) for path in data_context().content.plugin_paths.values())]
 
     @property
     def needs_pypi(self):  # type: () -> bool
@@ -121,9 +112,9 @@ class ImportTest(SanityMultipleVersion):
 
         messages = []
 
-        for import_type, test in (
-                ('module', _get_module_test(True)),
-                ('plugin', _get_module_test(False)),
+        for import_type, test, controller in (
+                ('module', _get_module_test(True), False),
+                ('plugin', _get_module_test(False), True),
         ):
             if import_type == 'plugin' and python.version in REMOTE_ONLY_PYTHON_VERSIONS:
                 continue
@@ -133,7 +124,7 @@ class ImportTest(SanityMultipleVersion):
             if not data and not args.prime_venvs:
                 continue
 
-            virtualenv_python = create_sanity_virtualenv(args, python, f'{self.name}.{import_type}', coverage=args.coverage, minimize=True)
+            virtualenv_python = create_sanity_virtualenv(args, python, f'{self.name}.{import_type}', ansible=controller, coverage=args.coverage, minimize=True)
 
             if not virtualenv_python:
                 display.warning(f'Skipping sanity test "{self.name}" on Python {python.version} due to missing virtual environment support.')
@@ -144,6 +135,9 @@ class ImportTest(SanityMultipleVersion):
             if virtualenv_yaml is False:
                 display.warning(f'Sanity test "{self.name}" ({import_type}) on Python {python.version} may be slow due to missing libyaml support in PyYAML.')
 
+            if args.prime_venvs:
+                continue
+
             env = ansible_environment(args, color=False)
 
             env.update(
@@ -152,7 +146,7 @@ class ImportTest(SanityMultipleVersion):
             )
 
             if data_context().content.collection:
-                external_python = create_sanity_virtualenv(args, args.controller_python, self.name)
+                external_python = create_sanity_virtualenv(args, args.controller_python, self.name, context=self.name)
 
                 env.update(
                     SANITY_COLLECTION_FULL_NAME=data_context().content.collection.full_name,
@@ -161,9 +155,6 @@ class ImportTest(SanityMultipleVersion):
                     ANSIBLE_CONTROLLER_MIN_PYTHON_VERSION=CONTROLLER_MIN_PYTHON_VERSION,
                     PYTHONPATH=':'.join((get_ansible_test_python_path(), env["PYTHONPATH"])),
                 )
-
-            if args.prime_venvs:
-                continue
 
             display.info(import_type + ': ' + data, verbosity=4)
 

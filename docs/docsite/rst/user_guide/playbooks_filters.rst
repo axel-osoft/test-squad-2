@@ -1518,8 +1518,8 @@ This allows for dynamic generation of VLAN lists on a Cisco IOS tagged interface
 
 .. _hash_filters:
 
-Hashing and encrypting strings and passwords
-==============================================
+Encrypting and checksumming strings and passwords
+=================================================
 
 .. versionadded:: 1.9
 

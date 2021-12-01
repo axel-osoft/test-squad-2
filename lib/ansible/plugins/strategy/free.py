@@ -34,7 +34,7 @@ DOCUMENTATION = '''
 import time
 
 from ansible import constants as C
-from ansible.errors import AnsibleError, AnsibleParserError
+from ansible.errors import AnsibleError
 from ansible.playbook.included_file import IncludedFile
 from ansible.plugins.loader import action_loader
 from ansible.plugins.strategy import StrategyBase
@@ -156,9 +156,9 @@ class StrategyModule(StrategyBase):
                             if same_tasks >= throttle:
                                 break
 
-                        # advance the host, mark the host blocked, and queue it
+                        # pop the task, mark the host blocked, and queue it
                         self._blocked_hosts[host_name] = True
-                        iterator.set_state_for_host(host.name, state)
+                        (state, task) = iterator.get_next_task_for_host(host)
 
                         try:
                             action = action_loader.get(task.action, class_only=True, collection_list=task.collections)
@@ -257,8 +257,6 @@ class StrategyModule(StrategyBase):
                             )
                         else:
                             new_blocks = self._load_included_file(included_file, iterator=iterator)
-                    except AnsibleParserError:
-                        raise
                     except AnsibleError as e:
                         for host in included_file._hosts:
                             iterator.mark_host_failed(host)

@@ -32,7 +32,7 @@ DOCUMENTATION = '''
 '''
 
 from ansible import constants as C
-from ansible.errors import AnsibleError, AnsibleAssertionError, AnsibleParserError
+from ansible.errors import AnsibleError, AnsibleAssertionError
 from ansible.executor.play_iterator import IteratingStates, FailedStates
 from ansible.module_utils._text import to_text
 from ansible.playbook.block import Block
@@ -156,13 +156,13 @@ class StrategyModule(StrategyBase):
                 host_state_task = host_tasks.get(host.name)
                 if host_state_task is None:
                     continue
-                (state, task) = host_state_task
-                s = iterator.get_active_state(state)
-                if task is None:
+                (s, t) = host_state_task
+                s = iterator.get_active_state(s)
+                if t is None:
                     continue
                 if s.run_state == cur_state and s.cur_block == cur_block:
-                    iterator.set_state_for_host(host.name, state)
-                    rvals.append((host, task))
+                    new_t = iterator.get_next_task_for_host(host)
+                    rvals.append((host, t))
                 else:
                     rvals.append((host, noop_task))
             display.debug("done advancing hosts to next task")
@@ -382,8 +382,7 @@ class StrategyModule(StrategyBase):
                                     else:
                                         all_blocks[host].append(noop_block)
                             display.debug("done iterating over new_blocks loaded from include file")
-                        except AnsibleParserError:
-                            raise
+
                         except AnsibleError as e:
                             for host in included_file._hosts:
                                 self._tqm._failed_hosts[host.name] = True

@@ -49,7 +49,7 @@ No notable changes
 Modules
 =======
 
-* To use ansible-core 2.13 for module execution, you must use Python 2 version 2.7 or Python 3 version 3.5 or newer. Any code utilizing ``ansible.module_utils.basic`` will not function with lower Python versions.
+* Python 2.7 is a hard requirement for module execution in this release. Any code utilizing ``ansible.module_utils.basic`` will not function with a lower Python version.
 
 
 Modules removed
@@ -70,12 +70,6 @@ Noteworthy module changes
 -------------------------
 
 No notable changes
-
-
-Breaking Changes
-----------------
-
-* ``ansible.module_utils.urls.fetch_url`` will now return the captured ``HTTPError`` exception as ``r``. ``HTTPError`` is a response like object that can offer more information to module authors. Modules should rely on ``info['status'] >= 400`` to determine if there was a failure, instead of using ``r is None`` or catching ``AttributeError`` when attempting ``r.read()``.
 
 
 Plugins
